@@ -1,8 +1,8 @@
 [package]
-name = "rustdesk-term"
-version = "1.4.6"
+name = "rustshell"
+version = "0.1.0"
 edition = "2021"
-description = "Standalone remote terminal client compatible with RustDesk relay infrastructure"
+description = "Cross-platform remote shell client via RustDesk relay infrastructure"
 license = "AGPL-3.0"
 rust-version = "1.75"
 

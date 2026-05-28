@@ -17,13 +17,13 @@ use hbb_common::{
 use sha2::{Digest, Sha256};
 use std::io::Write;
 
-const APP_NAME: &str = "rustdesk-term";
+const APP_NAME: &str = "rustshell";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // ── CLI arguments ──────────────────────────────────────────────────
 
 #[derive(Parser, Debug)]
-#[command(name = APP_NAME, about = "Remote terminal via RustDesk")]
+#[command(name = APP_NAME, about = "Cross-platform remote shell via RustDesk")]
 struct Args {
     #[arg(short = 'i', long)] id: String,
     #[arg(short = 's', long)] server: String,
@@ -360,7 +360,7 @@ async fn run(
     // Phase 5: Login with Terminal
     let mut lr = LoginRequest::new();
     lr.username = device_id.clone(); lr.password = pw_response.into();
-    lr.my_id = format!("term-cli-{}", std::process::id());
+    lr.my_id = format!("rustshell-{}", std::process::id());
     lr.version = VERSION.to_owned();
     let mut terminal = Terminal::new();
     terminal.service_id = format!("ts_{}", uuid::Uuid::new_v4());
