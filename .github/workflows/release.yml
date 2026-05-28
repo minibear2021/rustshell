@@ -22,20 +22,15 @@ jobs:
           path: target/release/rustshell
 
   linux-aarch64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-arm  # native ARM runner, no cross-compilation needed
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: rustup target add aarch64-unknown-linux-gnu
-      - run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu perl make
-      - run: |
-          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-          cargo build --release --target aarch64-unknown-linux-gnu
+      - run: cargo build --release
       - uses: actions/upload-artifact@v4
         with:
           name: rustshell-linux-aarch64
-          path: target/aarch64-unknown-linux-gnu/release/rustshell
+          path: target/release/rustshell
 
   macos-x86_64:
     runs-on: macos-13
