@@ -33,13 +33,15 @@ jobs:
           path: target/release/rustshell
 
   macos-x86_64:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
+        with:
+          targets: x86_64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
       - run: |
-          tar -czf rustshell-macos-x86_64.tar.gz -C target/release rustshell
+          tar -czf rustshell-macos-x86_64.tar.gz -C target/x86_64-apple-darwin/release rustshell
       - uses: actions/upload-artifact@v4
         with:
           name: rustshell-macos-x86_64

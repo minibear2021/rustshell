@@ -38,15 +38,17 @@ jobs:
   # ── macOS builds ──────────────────────────────────────────────────
 
   macos-x86_64:
-    runs-on: macos-13  # Intel
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
+        with:
+          targets: x86_64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
       - uses: actions/upload-artifact@v4
         with:
           name: rustshell-macos-x86_64
-          path: target/release/rustshell
+          path: target/x86_64-apple-darwin/release/rustshell
 
   macos-aarch64:
     runs-on: macos-latest  # Apple Silicon (M1/M2)
