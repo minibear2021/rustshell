@@ -37,12 +37,16 @@ rustshell
 Phase 1: Rendezvous
   connect_tcp(server:port)
   → attempt_secure_tcp()          // optional KeyExchange with rendezvous server
-  → send PunchHoleRequest         // { id, key, conn_type: TERMINAL, force_relay: true }
-  → recv RelayResponse/PunchHoleResponse  // { pk, relay_server, uuid }
+  → send PunchHoleRequest         // { id, key, conn_type: TERMINAL, force_relay: false }
+  → recv PunchHoleResponse or RelayResponse
 
-Phase 2: Relay
-  connect_tcp(relay_server:21117)
-  → send RequestRelay             // { id, uuid, key, conn_type: TERMINAL }
+Phase 2: Connect
+  if PunchHoleResponse with peer address:
+    → try direct TCP to peer      // faster, no relay overhead
+    → on failure: fall back to relay
+  else (RelayResponse or no direct addr):
+    → connect_tcp(relay_server:21117)
+    → send RequestRelay           // { id, uuid, key, conn_type: TERMINAL }
 
 Phase 3: E2E Key Exchange
   recv SignedId
@@ -67,7 +71,7 @@ Phase 5: Terminal I/O
 ### Key design decisions
 
 - **No lib dependence**: Does NOT depend on `librustdesk` — all connection logic (secure_tcp, key exchange, auth) is reimplemented in `main.rs` using only `hbb_common` types. This avoids pulling in `scrap` (screen capture) and other heavy desktop dependencies.
-- **Direct relay**: Uses `force_relay: true` in PunchHoleRequest — always goes through relay server, never tries direct P2P. This simplifies the client and avoids NAT traversal complexity.
+- **Direct-first with relay fallback**: Sets `force_relay: false` to let the rendezvous server provide peer address. Tries direct TCP connection first; falls back to relay if direct fails. This matches RustDesk's connection strategy — faster when peers are reachable, reliable relay when they're not.
 - **Platform-specific output**: On Windows, `ENABLE_VIRTUAL_TERMINAL_PROCESSING` is set on the console output handle so UTF-8 and VT100 escape sequences work correctly. On Unix, crossterm's raw mode is sufficient.
 - **Locale injection**: After the remote PTY starts, the client sends `export LANG=en_US.UTF-8` (macOS/Linux) or `chcp 65001` (Windows) to ensure the shell is in UTF-8 mode. Platform detection based on `PeerInfo.platform` from the login response.
 
