@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Build all platforms ───────────────────────────────────────────
+
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-linux-x86_64
+          path: target/release/rustshell
+
+  linux-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup target add aarch64-unknown-linux-gnu
+      - run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - run: |
+          cargo build --release --target aarch64-unknown-linux-gnu \
+            --config "target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\""
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-linux-aarch64
+          path: target/aarch64-unknown-linux-gnu/release/rustshell
+
+  macos-x86_64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: |
+          tar -czf rustshell-macos-x86_64.tar.gz -C target/release rustshell
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-macos-x86_64
+          path: rustshell-macos-x86_64.tar.gz
+
+  macos-aarch64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: |
+          tar -czf rustshell-macos-aarch64.tar.gz -C target/release rustshell
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-macos-aarch64
+          path: rustshell-macos-aarch64.tar.gz
+
+  windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: |
+          Compress-Archive -Path target/release/rustshell.exe -DestinationPath rustshell-windows-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-windows-x86_64
+          path: rustshell-windows-x86_64.zip
+
+  # ── Create GitHub Release ─────────────────────────────────────────
+
+  release:
+    needs: [linux-x86_64, linux-aarch64, macos-x86_64, macos-aarch64, windows-x86_64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rustshell-*
+          merge-multiple: false
+
+      - name: Prepare release assets
+        run: |
+          cp rustshell-linux-x86_64/rustshell rustshell-linux-x86_64
+          cp rustshell-linux-aarch64/rustshell rustshell-linux-aarch64
+          cp rustshell-macos-x86_64/rustshell-macos-x86_64.tar.gz .
+          cp rustshell-macos-aarch64/rustshell-macos-aarch64.tar.gz .
+          cp rustshell-windows-x86_64/rustshell-windows-x86_64.zip .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            rustshell-linux-x86_64
+            rustshell-linux-aarch64
+            rustshell-macos-x86_64.tar.gz
+            rustshell-macos-aarch64.tar.gz
+            rustshell-windows-x86_64.zip
+          generate_release_notes: true

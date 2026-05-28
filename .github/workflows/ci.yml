@@ -1,0 +1,77 @@
+name: Build
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Linux builds ──────────────────────────────────────────────────
+
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-linux-x86_64
+          path: target/release/rustshell
+
+  linux-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup target add aarch64-unknown-linux-gnu
+      - run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - run: |
+          cargo build --release --target aarch64-unknown-linux-gnu \
+            --config "target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\""
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-linux-aarch64
+          path: target/aarch64-unknown-linux-gnu/release/rustshell
+
+  # ── macOS builds ──────────────────────────────────────────────────
+
+  macos-x86_64:
+    runs-on: macos-13  # Intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-macos-x86_64
+          path: target/release/rustshell
+
+  macos-aarch64:
+    runs-on: macos-latest  # Apple Silicon (M1/M2)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-macos-aarch64
+          path: target/release/rustshell
+
+  # ── Windows build ─────────────────────────────────────────────────
+
+  windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustshell-windows-x86_64
+          path: target/release/rustshell.exe
