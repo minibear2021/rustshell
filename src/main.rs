@@ -397,22 +397,27 @@ async fn run(
     log::info!("Login request sent");
 
     let bytes = recv_raw(&mut conn, "wait_login_response").await?;
-    let msg_in = Message::parse_from_bytes(&bytes).map_err(|e| {
-        let preview: String = bytes.iter().take(16).map(|&b| format!("{b:02x}")).collect::<Vec<_>>().join(" ");
-        anyhow::anyhow!("Login response parse error: {e}. Bytes: [{preview}]")
-    })?;
-    let mut remote_platform = String::new();
-    match msg_in.union {
-        Some(message::Union::LoginResponse(lr)) => match lr.union {
-            Some(login_response::Union::Error(err)) if !err.is_empty() => bail!("Login failed: {}", err),
-            Some(login_response::Union::PeerInfo(pi)) => {
-                log::info!("Connected to {} ({} {})", pi.hostname, pi.platform, pi.version);
-                remote_platform = pi.platform;
+    // Some server versions send LoginResponse directly (not wrapped in Message).
+    // Try Message first, then fall back to raw LoginResponse.
+    let lr = match Message::parse_from_bytes(&bytes) {
+        Ok(m) => match m.union {
+            Some(message::Union::LoginResponse(lr)) => lr,
+            Some(message::Union::TerminalResponse(_)) => {
+                log::debug!("Early terminal response, proceeding");
+                LoginResponse::new()
             }
-            _ => log::info!("Login accepted"),
+            _ => LoginResponse::parse_from_bytes(&bytes).unwrap_or_default(),
         },
-        Some(message::Union::TerminalResponse(_)) => { log::debug!("Early terminal response"); }
-        other => log::warn!("Unexpected post-login message: {:?}", other.map(|_| "unknown")),
+        Err(_) => LoginResponse::parse_from_bytes(&bytes).unwrap_or_default(),
+    };
+    let mut remote_platform = String::new();
+    match lr.union {
+        Some(login_response::Union::Error(err)) if !err.is_empty() => bail!("Login failed: {}", err),
+        Some(login_response::Union::PeerInfo(pi)) => {
+            log::info!("Connected to {} ({} {})", pi.hostname, pi.platform, pi.version);
+            remote_platform = pi.platform;
+        }
+        _ => log::debug!("Login accepted"),
     }
 
     // Phase 6: Terminal I/O
