@@ -535,9 +535,9 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
                     // - POSIX shells (bash/zsh on macOS/Linux): export LANG/LC_ALL
                     // - Windows (PowerShell/cmd): chcp 65001
                     let cmd: &[u8] = if remote_platform.eq_ignore_ascii_case("Windows") {
-                        b"\rchcp 65001 >nul 2>&1\r"
+                        b"chcp 65001 >nul 2>&1\r"
                     } else {
-                        b"\rexport LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 2>/dev/null; stty iutf8 2>/dev/null\r"
+                        b"export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 2>/dev/null; stty iutf8 2>/dev/null\r"
                     };
                     let mut a = TerminalAction::new();
                     a.set_data(TerminalData { terminal_id, data: cmd.to_vec().into(), compressed: false, ..Default::default() });
