@@ -264,7 +264,7 @@ async fn run(
     msg_out.set_punch_hole_request(PunchHoleRequest {
         id: device_id.clone(), licence_key: licence_key.clone(),
         conn_type: ConnType::TERMINAL.into(),
-        nat_type: NatType::SYMMETRIC.into(), force_relay: true,
+        nat_type: NatType::SYMMETRIC.into(), force_relay: false,
         version: VERSION.to_owned(), ..Default::default()
     });
     log::info!("Requesting connection to device {}...", device_id);
@@ -272,13 +272,15 @@ async fn run(
 
     // Wait for response
     let rmsg = recv_rendezvous_msg(&mut socket, "wait_rendezvous_response").await?;
-    let (peer_pk_from_server, relay_server, relay_uuid) = match rmsg.union {
+    let (peer_pk_from_server, relay_server, relay_uuid, try_direct) = match rmsg.union {
         Some(hbb_common::rendezvous_proto::rendezvous_message::Union::PunchHoleResponse(ph)) => {
             if !ph.socket_addr.is_empty() {
+                let addr = hbb_common::AddrMangle::decode(&ph.socket_addr);
                 let relay = if ph.relay_server.is_empty() {
                     socket_client::increase_port(&rendezvous_addr, 1)
-                } else { socket_client::check_port(ph.relay_server, RELAY_PORT) };
-                (ph.pk.to_vec(), relay, String::new())
+                } else { socket_client::check_port(ph.relay_server.clone(), RELAY_PORT) };
+                log::info!("Peer address: {} (local: {}), relay fallback: {}", addr, ph.is_local(), relay);
+                (ph.pk.to_vec(), relay, String::new(), Some(addr))
             } else {
                 use hbb_common::rendezvous_proto::punch_hole_response::Failure;
                 let reason = match ph.failure.enum_value() {
@@ -300,24 +302,48 @@ async fn run(
                 Some(hbb_common::rendezvous_proto::relay_response::Union::Pk(pk)) => pk.to_vec(),
                 _ => Vec::new(),
             };
-            (pk, relay, rr.uuid)
+            (pk, relay, rr.uuid, None)
         }
         other => bail!("Unexpected response: {:?}", other.map(|_| "unknown")),
     };
 
-    // Phase 2: Connect to relay
-    log::info!("Connecting to relay server {}...", relay_server);
-    let mut conn = socket_client::connect_tcp(relay_server.clone(), CONNECT_TIMEOUT).await
-        .with_context(|| format!("Failed to connect to relay {}", relay_server))?;
-    log::info!("TCP connected to relay server");
-
-    let mut msg_out = RendezvousMessage::new();
-    msg_out.set_request_relay(RequestRelay {
-        id: device_id.clone(), uuid: relay_uuid,
-        licence_key: licence_key.clone(),
-        conn_type: ConnType::TERMINAL.into(), ..Default::default()
-    });
-    send_msg(&mut conn, &msg_out, "request_relay").await?;
+    // Phase 2: Connect — try direct first, fall back to relay
+    let mut conn = if let Some(addr) = try_direct {
+        let direct_addr = format!("{}:{}", addr.ip(), addr.port());
+        log::info!("Trying direct connection to {}...", direct_addr);
+        match socket_client::connect_tcp(direct_addr, CONNECT_TIMEOUT).await {
+            Ok(c) => {
+                log::info!("Direct connection established");
+                c
+            }
+            Err(e) => {
+                log::info!("Direct failed ({}), falling back to relay {}", e, relay_server);
+                let mut c = socket_client::connect_tcp(relay_server.clone(), CONNECT_TIMEOUT).await
+                    .with_context(|| format!("Failed to connect to relay {}", relay_server))?;
+                // Send RequestRelay for relay
+                let mut msg_out = RendezvousMessage::new();
+                msg_out.set_request_relay(RequestRelay {
+                    id: device_id.clone(), uuid: relay_uuid,
+                    licence_key: licence_key.clone(),
+                    conn_type: ConnType::TERMINAL.into(), ..Default::default()
+                });
+                send_msg(&mut c, &msg_out, "request_relay").await?;
+                c
+            }
+        }
+    } else {
+        log::info!("Connecting via relay server {}...", relay_server);
+        let mut c = socket_client::connect_tcp(relay_server.clone(), CONNECT_TIMEOUT).await
+            .with_context(|| format!("Failed to connect to relay {}", relay_server))?;
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_request_relay(RequestRelay {
+            id: device_id.clone(), uuid: relay_uuid,
+            licence_key: licence_key.clone(),
+            conn_type: ConnType::TERMINAL.into(), ..Default::default()
+        });
+        send_msg(&mut c, &msg_out, "request_relay").await?;
+        c
+    };
 
     // Phase 3: E2E key exchange
     let rs_pk = get_rs_pk(key_str).context("Invalid rendezvous server key")?;
