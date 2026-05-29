@@ -34,6 +34,33 @@ Options:
   -h, --help                 Print help
 ```
 
+## Environment Variables
+
+All CLI arguments can also be set via environment variables (prefixed with `RUSTSHELL_`).
+CLI arguments take precedence when both are provided.
+
+| Variable | CLI flag | Description |
+|----------|----------|-------------|
+| `RUSTSHELL_ID` | `--id` | Remote device ID |
+| `RUSTSHELL_SERVER` | `--server` | Rendezvous server address |
+| `RUSTSHELL_PORT` | `--port` | Rendezvous server port |
+| `RUSTSHELL_KEY` | `--key` | Licence key |
+| `RUSTSHELL_PASSWORD` | `--password` | Device password |
+| `RUSTSHELL_DEBUG` | `--debug` | Set to `1` or `true` |
+
+```bash
+# All configuration via environment variables
+export RUSTSHELL_ID=123456789
+export RUSTSHELL_SERVER=myserver.example.com
+export RUSTSHELL_KEY="MyKeyBase64..."
+export RUSTSHELL_PASSWORD="mypassword"
+rustshell
+
+# Override specific values with CLI flags
+RUSTSHELL_ID=123456789 RUSTSHELL_SERVER=myserver.example.com \
+  rustshell -k "MyKey..." -w mypassword
+```
+
 ## Examples
 
 ```bash
