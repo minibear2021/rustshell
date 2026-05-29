@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   push:
@@ -11,65 +11,135 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # ── Linux builds ──────────────────────────────────────────────────
+  # ── Check if version changed (compare Cargo.toml with latest tag) ──
 
-  linux-x86_64:
+  check-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.version.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: version
+        run: |
+          VER=$(grep '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VER" >> $GITHUB_OUTPUT
+
+          LATEST_TAG=$(git tag --sort=-v:refname | grep '^v' | head -1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous tag, creating v$VER"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            git tag "v$VER"
+            git push origin "v$VER"
+            exit 0
+          fi
+
+          LATEST_VER="${LATEST_TAG#v}"
+          if [ "$VER" != "$LATEST_VER" ]; then
+            echo "Version changed: $LATEST_VER -> $VER"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            git tag "v$VER"
+            git push origin "v$VER"
+          else
+            echo "Version unchanged ($VER), skipping release builds"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ── Quick validation (always runs) ────────────────────────────────
+
+  quick-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rustshell-linux-x86_64
-          path: target/release/rustshell
+      - run: cargo check
 
-  linux-aarch64:
-    runs-on: ubuntu-22.04-arm  # native ARM runner, no cross-compilation needed
+  # ── Build + release (only if version changed) ─────────────────────
+
+  linux-x86_64:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
-      - uses: actions/upload-artifact@v4
+      - run: cp target/release/rustshell rustshell-linux-x86_64
+      - uses: softprops/action-gh-release@v2
         with:
-          name: rustshell-linux-aarch64
-          path: target/release/rustshell
+          tag_name: v${{ needs.check-version.outputs.version }}
+          files: rustshell-linux-x86_64
 
-  # ── macOS builds ──────────────────────────────────────────────────
+  linux-aarch64:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-22.04-arm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: cp target/release/rustshell rustshell-linux-aarch64
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          files: rustshell-linux-aarch64
 
   macos-x86_64:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
       - run: cargo build --release --target x86_64-apple-darwin
-      - uses: actions/upload-artifact@v4
+      - run: cp target/x86_64-apple-darwin/release/rustshell rustshell-macos-x86_64
+      - uses: softprops/action-gh-release@v2
         with:
-          name: rustshell-macos-x86_64
-          path: target/x86_64-apple-darwin/release/rustshell
+          tag_name: v${{ needs.check-version.outputs.version }}
+          files: rustshell-macos-x86_64
 
   macos-aarch64:
-    runs-on: macos-latest  # Apple Silicon (M1/M2)
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
-      - uses: actions/upload-artifact@v4
+      - run: cp target/release/rustshell rustshell-macos-aarch64
+      - uses: softprops/action-gh-release@v2
         with:
-          name: rustshell-macos-aarch64
-          path: target/release/rustshell
-
-  # ── Windows build ─────────────────────────────────────────────────
+          tag_name: v${{ needs.check-version.outputs.version }}
+          files: rustshell-macos-aarch64
 
   windows-x86_64:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
-      - uses: actions/upload-artifact@v4
+      - run: cp target/release/rustshell.exe rustshell-windows-x86_64.exe
+      - uses: softprops/action-gh-release@v2
         with:
-          name: rustshell-windows-x86_64
-          path: target/release/rustshell.exe
+          tag_name: v${{ needs.check-version.outputs.version }}
+          files: rustshell-windows-x86_64.exe
