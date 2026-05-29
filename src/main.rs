@@ -403,6 +403,7 @@ async fn run(
     lr.username = device_id.clone(); lr.password = pw_response.into();
     lr.my_id = format!("RustShell-{}", std::process::id());
     lr.version = VERSION.to_owned();
+    lr.my_platform = std::env::consts::OS.to_owned();
     let mut terminal = Terminal::new();
     terminal.service_id = format!("ts_{}", uuid::Uuid::new_v4());
     lr.set_terminal(terminal);
@@ -412,6 +413,7 @@ async fn run(
     log::info!("Login request sent");
 
     let bytes = recv_raw(&mut conn, "wait_login_response").await?;
+    log::debug!("Login response raw bytes ({}): {:02x?}", bytes.len(), bytes.as_ref());
     // Some server versions send LoginResponse directly (not wrapped in Message).
     // Try Message first, then fall back to raw LoginResponse.
     let lr = match Message::parse_from_bytes(&bytes) {
@@ -432,7 +434,10 @@ async fn run(
             log::info!("Connected to {} ({} {})", pi.hostname, pi.platform, pi.version);
             remote_platform = pi.platform;
         }
-        _ => log::debug!("Login accepted"),
+        _ => {
+            log::debug!("Login accepted (no peer info, empty response)");
+            log::warn!("Server did not provide platform info — terminal access may be unsupported on this host");
+        }
     }
 
     // Phase 6: Terminal I/O
@@ -481,7 +486,7 @@ async fn attempt_secure_tcp(conn: &mut Stream, key: &str) -> Result<()> {
 async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()> {
     let _guard = ConsoleGuard::enable()?;
     let (cols, rows) = crossterm::terminal::size().context("Failed to get terminal size")?;
-    let terminal_id: i32 = 1;
+    let terminal_id: i32 = 0;
 
     {
         let mut action = TerminalAction::new();
@@ -490,7 +495,7 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
         msg.set_terminal_action(action);
         send_msg(conn, &msg, "open_terminal").await?;
     }
-    log::debug!("Terminal opened ({}x{})", cols, rows);
+    log::debug!("OpenTerminal sent ({}x{}), waiting for shell...", cols, rows);
 
     let mut input_timer = time::interval(std::time::Duration::from_millis(20));
     let mut keepalive = time::interval(std::time::Duration::from_secs(15));
@@ -501,7 +506,9 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
 
     loop {
         tokio::select! {
-            _ = keepalive.tick() => { conn.send(&Message::new()).await.ok(); }
+            _ = keepalive.tick() => {
+                if terminal_opened { conn.send(&Message::new()).await.ok(); }
+            }
 
             res = conn.next() => {
                 let bytes = match res {
@@ -510,7 +517,7 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
                     None => { log::info!("Connection closed by peer"); break; }
                 };
                 let msg_in = match Message::parse_from_bytes(&bytes) {
-                    Ok(m) => m, Err(e) => { log::error!("Parse: {}", e); continue; }
+                    Ok(m) => m, Err(e) => { log::error!("Parse: {} (raw: {:02x?})", e, bytes.as_ref()); continue; }
                 };
                 match msg_in.union {
                     Some(message::Union::TerminalResponse(resp)) => {
@@ -519,7 +526,7 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
                             Some(Union::Opened(o)) => {
                                 terminal_opened = o.success;
                                 if !o.success { bail!("Terminal open failed: {}", o.message); }
-                                log::debug!("Shell started (pid: {})", o.pid);
+                                log::info!("Shell started (pid: {})", o.pid);
                             }
                             Some(Union::Data(data)) => {
                                 let output = if data.compressed {
@@ -532,11 +539,11 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
                                 return Ok(());
                             }
                             Some(Union::Error(e)) => bail!("Terminal error: {}", e.message),
-                            _ => {}
+                            _ => { log::debug!("TerminalResponse with empty union"); }
                         }
                     }
                     Some(message::Union::Hash(_)) => {}
-                    _ => { log::trace!("Unhandled msg"); }
+                    other => { log::debug!("Unhandled message type: {:?}", other.map(|_| ())); }
                 }
             }
 
