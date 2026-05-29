@@ -86,20 +86,25 @@ rustshell                         RustDesk infrastructure              Remote de
     │                                    │                                  │
     ├── TCP connect ──────────────────► rendezvous server (:21116)          │
     │   PunchHoleRequest{id, key}        │                                  │
-    │   ◄── RelayResponse{pk, uuid} ────┤                                  │
+    │   ◄── PunchHoleResponse ──────────┤                                  │
+    │   {peer_addr, relay_fallback}      │                                  │
     │                                    │                                  │
-    ├── TCP connect ──────────────────► relay server (:21117)               │
-    │   RequestRelay{id, uuid}          │                                  │
-    │                                    ├── bridge ───────────────────►   │
+    ├── direct TCP ────────────────(try)──┼────────────────────────────►   │
+    │   (fallback on failure)                                 │             │
+    │   ─── relay TCP ────────────────► relay (:21117)       │             │
+    │       RequestRelay{id, uuid}      │                     │             │
+    │                                    ├── bridge ────────►│             │
+    │                                    │                                    │
+    │   ◄══ E2E encrypted channel ═══════════════════════════════════════   │
     │   ◄── SignedId ───────────────────────────────────────────────────   │
-    │   ──── PublicKey ───────────────────────────────────────────────►   │
+    │   ──── PublicKey (NaCl key exchange) ───────────────────────────►   │
     │   ◄── Hash challenge ────────────────────────────────────────────   │
     │   ──── LoginRequest{terminal} ──────────────────────────────────►   │
-    │   ◄── Terminal I/O (stdin/stdout) ──────────────────────────────   │
+    │   ◄══ Terminal I/O (stdin/stdout) ═══════════════════════════════   │
     │                                                                      │
     ▼                                                                      ▼
 local terminal                                                     remote shell
-(raw mode)                                                        (bash/zsh/sh)
+(raw mode)                                                   (bash/zsh/PowerShell)
 ```
 
 1. **Rendezvous**: Connects to the ID server, requests connection to target device
