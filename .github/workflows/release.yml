@@ -4,6 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
   TAG_NAME: ${{ github.ref_name }}
