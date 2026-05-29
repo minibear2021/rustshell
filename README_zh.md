@@ -48,6 +48,7 @@ CLI 参数优先级高于环境变量。
 | `RUSTSHELL_PORT` | `--port` | ID 服务器端口 |
 | `RUSTSHELL_KEY` | `--key` | 许可证密钥 |
 | `RUSTSHELL_PASSWORD` | `--password` | 设备密码 |
+| `RUSTSHELL_SERVICE_ID` | `--service-id` | 会话 ID，用于重连已有会话 |
 | `RUSTSHELL_DEBUG` | `--debug` | 设为 `1` 或 `true` |
 
 ```bash
@@ -78,6 +79,28 @@ rustshell -i 123456789 -s myserver.example.com -k "MyKey..."
 # 调试模式
 rustshell -i 123456789 -s myserver.example.com -k "MyKey..." -w mypassword -d
 ```
+
+## 会话重连
+
+每个终端会话会分配一个唯一的 service ID（连接后显示）。
+下次连接时传入此 ID 即可恢复到已有会话，而不是开启新的。
+
+```bash
+# 首次连接 — 注意输出中的 service ID
+rustshell -i 123456789 -s myserver.example.com
+# 输出:
+#   | Session: ts_a1b2c3d4-...
+#   | (to reconnect, use: --service-id ts_a1b2c3d4-...)
+
+# 之后，重连到同一会话
+rustshell -i 123456789 -s myserver.example.com --service-id ts_a1b2c3d4-...
+
+# 或通过环境变量
+RUSTSHELL_SERVICE_ID=ts_a1b2c3d4-... rustshell -i 123456789 -s myserver.example.com
+```
+
+会话结束后会再次打印 service ID 作为提醒。
+Session 状态不会持久化到磁盘 — rustshell 完全无状态。
 
 ## 工作原理
 
