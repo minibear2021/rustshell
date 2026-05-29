@@ -145,3 +145,21 @@ jobs:
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           files: rustshell-v${{ needs.check-version.outputs.version }}-windows-x86_64.exe
+
+  windows-aarch64:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - run: cargo build --release --target aarch64-pc-windows-msvc
+      - run: cp target/aarch64-pc-windows-msvc/release/rustshell.exe rustshell-v${{ needs.check-version.outputs.version }}-windows-aarch64.exe
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          files: rustshell-v${{ needs.check-version.outputs.version }}-windows-aarch64.exe
