@@ -496,14 +496,17 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
     let mut keepalive = time::interval(std::time::Duration::from_secs(15));
     let mut terminal_opened = false;
     let mut locale_injected = false;
+    let mut last_recv = time::Instant::now();
     let mut last_cols = cols;
     let mut last_rows = rows;
+    const IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
     loop {
         tokio::select! {
             _ = keepalive.tick() => { conn.send(&Message::new()).await.ok(); }
 
             res = conn.next() => {
+                last_recv = time::Instant::now();
                 let bytes = match res {
                     Some(Ok(b)) => b,
                     Some(Err(e)) => { log::error!("Stream error: {}", e); break; }
@@ -541,6 +544,18 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
             }
 
             _ = input_timer.tick() => {
+                // Idle timeout: if no data from remote for IDLE_TIMEOUT, close.
+                if terminal_opened && last_recv.elapsed() > IDLE_TIMEOUT {
+                    log::info!("No data from remote for {}s, closing (shell may have exited)", IDLE_TIMEOUT.as_secs());
+                    if terminal_opened {
+                        let mut a = TerminalAction::new();
+                        a.set_close(CloseTerminal { terminal_id, ..Default::default() });
+                        let mut m = Message::new(); m.set_terminal_action(a);
+                        conn.send(&m).await.ok();
+                    }
+                    return Ok(());
+                }
+
                 // Print locale setup hint after shell starts.
                 // The remote PTY may run in C locale, breaking CJK display.
                 // Let the user decide whether to run it.
