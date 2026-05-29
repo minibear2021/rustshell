@@ -28,7 +28,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
     about = "Cross-platform remote shell via RustDesk",
     after_help = "Environment variables (fallback when CLI arg not set):\n  \
                   RUSTSHELL_ID, RUSTSHELL_SERVER, RUSTSHELL_PORT, RUSTSHELL_KEY, \
-                  RUSTSHELL_PASSWORD, RUSTSHELL_SERVICE_ID, RUSTSHELL_PERSISTENT, RUSTSHELL_DEBUG=(1|true)"
+                  RUSTSHELL_PASSWORD, RUSTSHELL_SERVICE_ID, RUSTSHELL_DEBUG=(1|true)"
 )]
 struct Args {
     #[arg(short = 'i', long, default_value = "")] id: String,
@@ -39,8 +39,6 @@ struct Args {
     #[arg(short = 'd', long, default_value = "false")] debug: bool,
     /// Service ID for reconnecting to an existing terminal session
     #[arg(long, default_value = "")] service_id: String,
-    /// Keep the terminal session alive after disconnect (enables reconnection)
-    #[arg(long, default_value = "false")] persistent: bool,
 }
 
 // ── Crypto helpers ─────────────────────────────────────────────────
@@ -237,7 +235,6 @@ fn main() {
     if !args.debug { args.debug = std::env::var("RUSTSHELL_DEBUG").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false); }
     if args.password.is_empty() { args.password = std::env::var("RUSTSHELL_PASSWORD").unwrap_or_default(); }
     if args.service_id.is_empty() { args.service_id = std::env::var("RUSTSHELL_SERVICE_ID").unwrap_or_default(); }
-if !args.persistent { args.persistent = std::env::var("RUSTSHELL_PERSISTENT").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false); }
 
     if args.id.is_empty() { eprintln!("Error: --id or RUSTSHELL_ID is required"); std::process::exit(1); }
     if args.server.is_empty() { eprintln!("Error: --server or RUSTSHELL_SERVER is required"); std::process::exit(1); }
@@ -258,7 +255,7 @@ if !args.persistent { args.persistent = std::env::var("RUSTSHELL_PERSISTENT").ma
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all().build().expect("tokio runtime");
 
-    if let Err(e) = rt.block_on(run(args.id, args.key, args.server, args.port, password, args.service_id, args.persistent)) {
+    if let Err(e) = rt.block_on(run(args.id, args.key, args.server, args.port, password, args.service_id)) {
         let _ = crossterm::terminal::disable_raw_mode();
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
@@ -268,7 +265,7 @@ if !args.persistent { args.persistent = std::env::var("RUSTSHELL_PERSISTENT").ma
 async fn run(
     device_id: String, licence_key: String,
     server: String, port: u16, password: String,
-    service_id: String, persistent: bool,
+    service_id: String,
 ) -> Result<()> {
     let rendezvous_addr = format!("{}:{}", server, port);
     log::info!("Connecting to rendezvous server {}...", rendezvous_addr);
@@ -418,11 +415,6 @@ async fn run(
     };
     terminal.service_id = svc_id.clone();
     lr.set_terminal(terminal);
-    if persistent {
-        let mut opt = OptionMessage::new();
-        opt.terminal_persistent = option_message::BoolOption::Yes.into();
-        lr.option = hbb_common::protobuf::MessageField::some(opt);
-    }
     let mut lr_msg = Message::new();
     lr_msg.set_login_request(lr);
     send_msg(&mut conn, &lr_msg, "login_request").await?;
@@ -453,7 +445,7 @@ async fn run(
     }
 
     // Phase 6: Terminal I/O
-    terminal_io_loop(&mut conn, &remote_platform, &svc_id, persistent).await
+    terminal_io_loop(&mut conn, &remote_platform, &svc_id).await
 }
 
 // ── secure_tcp ─────────────────────────────────────────────────────
@@ -495,7 +487,7 @@ async fn attempt_secure_tcp(conn: &mut Stream, key: &str) -> Result<()> {
 
 // ── Terminal I/O loop ──────────────────────────────────────────────
 
-async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: &str, persistent: bool) -> Result<()> {
+async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: &str) -> Result<()> {
     let _guard = ConsoleGuard::enable()?;
     let (cols, rows) = crossterm::terminal::size().context("Failed to get terminal size")?;
     let terminal_id: i32 = 1;
@@ -512,7 +504,6 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: 
     let mut input_timer = time::interval(std::time::Duration::from_millis(20));
     let mut keepalive = time::interval(std::time::Duration::from_secs(15));
     let mut terminal_opened = false;
-    // Always show locale hint — reconnection may lose shell env vars
     let mut locale_injected = false;
     let mut last_cols = cols;
     let mut last_rows = rows;
@@ -541,11 +532,7 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: 
                                 let sid = if o.service_id.is_empty() { service_id } else { &o.service_id };
                                 if !sid.is_empty() {
                                     eprintln!("  | Session: {sid}");
-                                    if persistent {
-                                    eprintln!("  | (save this ID to reconnect: --service-id {sid})");
-                                } else {
-                                    eprintln!("  | (add --persistent to keep this session alive after disconnect)");
-                                }
+                                    eprintln!("  | (to reconnect, use: --service-id {sid})");
                                 }
                             }
                             Some(Union::Data(data)) => {
