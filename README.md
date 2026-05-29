@@ -48,7 +48,6 @@ CLI arguments take precedence when both are provided.
 | `RUSTSHELL_PORT` | `--port` | Rendezvous server port |
 | `RUSTSHELL_KEY` | `--key` | Licence key |
 | `RUSTSHELL_PASSWORD` | `--password` | Device password |
-| `RUSTSHELL_SERVICE_ID` | `--service-id` | Session ID for reconnection |
 | `RUSTSHELL_DEBUG` | `--debug` | Set to `1` or `true` |
 
 ```bash
@@ -79,28 +78,6 @@ rustshell -i 123456789 -s myserver.example.com -k "MyKey..."
 # Debug mode for troubleshooting
 rustshell -i 123456789 -s myserver.example.com -k "MyKey..." -w mypassword -d
 ```
-
-## Session Reconnection
-
-Each terminal session is assigned a unique service ID (shown after connection).
-Pass this ID to reconnect to an existing session instead of starting a new one.
-
-```bash
-# First connection — note the service ID in the output
-rustshell -i 123456789 -s myserver.example.com
-# Output:
-#   | Session: ts_a1b2c3d4-...
-#   | (to reconnect, use: --service-id ts_a1b2c3d4-...)
-
-# Later, reconnect to the same session
-rustshell -i 123456789 -s myserver.example.com --service-id ts_a1b2c3d4-...
-
-# Or via environment variable
-RUSTSHELL_SERVICE_ID=ts_a1b2c3d4-... rustshell -i 123456789 -s myserver.example.com
-```
-
-When the session ends, the service ID is printed again as a reminder.
-The session state is not persisted to disk — rustshell is fully stateless.
 
 ## How It Works
 

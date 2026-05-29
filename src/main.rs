@@ -28,7 +28,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
     about = "Cross-platform remote shell via RustDesk",
     after_help = "Environment variables (fallback when CLI arg not set):\n  \
                   RUSTSHELL_ID, RUSTSHELL_SERVER, RUSTSHELL_PORT, RUSTSHELL_KEY, \
-                  RUSTSHELL_PASSWORD, RUSTSHELL_SERVICE_ID, RUSTSHELL_DEBUG=(1|true)"
+                  RUSTSHELL_PASSWORD, RUSTSHELL_DEBUG=(1|true)"
 )]
 struct Args {
     #[arg(short = 'i', long, default_value = "")] id: String,
@@ -37,8 +37,6 @@ struct Args {
     #[arg(short = 'k', long, default_value = "")] key: String,
     #[arg(short = 'w', long, default_value = "")] password: String,
     #[arg(short = 'd', long, default_value = "false")] debug: bool,
-    /// Service ID for reconnecting to an existing terminal session
-    #[arg(long, default_value = "")] service_id: String,
 }
 
 // ── Crypto helpers ─────────────────────────────────────────────────
@@ -234,7 +232,6 @@ fn main() {
     if args.key.is_empty() { args.key = std::env::var("RUSTSHELL_KEY").unwrap_or_default(); }
     if !args.debug { args.debug = std::env::var("RUSTSHELL_DEBUG").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false); }
     if args.password.is_empty() { args.password = std::env::var("RUSTSHELL_PASSWORD").unwrap_or_default(); }
-    if args.service_id.is_empty() { args.service_id = std::env::var("RUSTSHELL_SERVICE_ID").unwrap_or_default(); }
 
     if args.id.is_empty() { eprintln!("Error: --id or RUSTSHELL_ID is required"); std::process::exit(1); }
     if args.server.is_empty() { eprintln!("Error: --server or RUSTSHELL_SERVER is required"); std::process::exit(1); }
@@ -255,7 +252,7 @@ fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all().build().expect("tokio runtime");
 
-    if let Err(e) = rt.block_on(run(args.id, args.key, args.server, args.port, password, args.service_id)) {
+    if let Err(e) = rt.block_on(run(args.id, args.key, args.server, args.port, password)) {
         let _ = crossterm::terminal::disable_raw_mode();
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
@@ -265,7 +262,6 @@ fn main() {
 async fn run(
     device_id: String, licence_key: String,
     server: String, port: u16, password: String,
-    service_id: String,
 ) -> Result<()> {
     let rendezvous_addr = format!("{}:{}", server, port);
     log::info!("Connecting to rendezvous server {}...", rendezvous_addr);
@@ -408,12 +404,7 @@ async fn run(
     lr.my_id = format!("rustshell-{}", std::process::id());
     lr.version = VERSION.to_owned();
     let mut terminal = Terminal::new();
-    let svc_id = if service_id.is_empty() {
-        format!("ts_{}", uuid::Uuid::new_v4())
-    } else {
-        service_id
-    };
-    terminal.service_id = svc_id.clone();
+    terminal.service_id = format!("ts_{}", uuid::Uuid::new_v4());
     lr.set_terminal(terminal);
     let mut lr_msg = Message::new();
     lr_msg.set_login_request(lr);
@@ -445,7 +436,7 @@ async fn run(
     }
 
     // Phase 6: Terminal I/O
-    terminal_io_loop(&mut conn, &remote_platform, &svc_id).await
+    terminal_io_loop(&mut conn, &remote_platform).await
 }
 
 // ── secure_tcp ─────────────────────────────────────────────────────
@@ -487,7 +478,7 @@ async fn attempt_secure_tcp(conn: &mut Stream, key: &str) -> Result<()> {
 
 // ── Terminal I/O loop ──────────────────────────────────────────────
 
-async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: &str) -> Result<()> {
+async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()> {
     let _guard = ConsoleGuard::enable()?;
     let (cols, rows) = crossterm::terminal::size().context("Failed to get terminal size")?;
     let terminal_id: i32 = 1;
@@ -529,11 +520,6 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: 
                                 terminal_opened = o.success;
                                 if !o.success { bail!("Terminal open failed: {}", o.message); }
                                 log::debug!("Shell started (pid: {})", o.pid);
-                                let sid = if o.service_id.is_empty() { service_id } else { &o.service_id };
-                                if !sid.is_empty() {
-                                    eprintln!("  | Session: {sid}");
-                                    eprintln!("  | (to reconnect, use: --service-id {sid})");
-                                }
                             }
                             Some(Union::Data(data)) => {
                                 let output = if data.compressed {
@@ -543,9 +529,6 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str, service_id: 
                             }
                             Some(Union::Closed(c)) => {
                                 log::info!("Terminal closed (exit code: {})", c.exit_code);
-                                if !service_id.is_empty() {
-                                    eprintln!("  | Session ended. To reconnect: --service-id {service_id}");
-                                }
                                 return Ok(());
                             }
                             Some(Union::Error(e)) => bail!("Terminal error: {}", e.message),
