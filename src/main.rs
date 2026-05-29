@@ -17,7 +17,7 @@ use hbb_common::{
 use sha2::{Digest, Sha256};
 use std::io::Write;
 
-const APP_NAME: &str = "rustshell";
+const APP_NAME: &str = "RustShell";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // ── CLI arguments ──────────────────────────────────────────────────
@@ -401,7 +401,7 @@ async fn run(
     // Phase 5: Login with Terminal
     let mut lr = LoginRequest::new();
     lr.username = device_id.clone(); lr.password = pw_response.into();
-    lr.my_id = format!("rustshell-{}", std::process::id());
+    lr.my_id = format!("RustShell-{}", std::process::id());
     lr.version = VERSION.to_owned();
     let mut terminal = Terminal::new();
     terminal.service_id = format!("ts_{}", uuid::Uuid::new_v4());

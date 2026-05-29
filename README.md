@@ -1,4 +1,4 @@
-# rustshell
+# RustShell
 
 [中文文档](README_zh.md)
 
@@ -135,7 +135,7 @@ local terminal                                                     remote shell
 
 **Chinese/CJK characters display as garbled text:**
 - The remote shell's locale may not be set to UTF-8
-- rustshell prints a hint with the appropriate fix command after connecting
+- RustShell prints a hint with the appropriate fix command after connecting
 - macOS/Linux: copy and run `export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`
 - Windows: copy and run `chcp 65001`
 
