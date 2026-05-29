@@ -132,6 +132,11 @@ local terminal                                                     remote shell
 - macOS/Linux: copy and run `export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`
 - Windows: copy and run `chcp 65001`
 
+**Connection hangs after typing `exit` on Windows remote:**
+- This is a [known bug](https://github.com/rustdesk/rustdesk) in the RustDesk server: Windows ConPTY does not signal EOF when the shell exits, so the server never detects the session has ended
+- **Workaround**: use Ctrl+C or Ctrl+D to close the session instead of typing `exit`. These send an explicit `CloseTerminal` message that the server handles correctly
+- This issue only affects Windows remotes; macOS and Linux remotes work correctly with `exit`
+
 **Connection drops after idle:**
 - A keepalive heartbeat is sent every 15 seconds; the relay or server may have a shorter timeout
 - Check the relay server's timeout configuration
