@@ -541,24 +541,17 @@ async fn terminal_io_loop(conn: &mut Stream, remote_platform: &str) -> Result<()
             }
 
             _ = input_timer.tick() => {
-                // Inject UTF-8 locale fix after shell starts.
-                // The remote PTY may run in C locale, breaking CJK echo.
-                // Sending these exports makes zsh/bash handle multi-byte input correctly.
+                // Print locale setup hint after shell starts.
+                // The remote PTY may run in C locale, breaking CJK display.
+                // Let the user decide whether to run it.
                 if terminal_opened && !locale_injected {
                     locale_injected = true;
-                    // Pick the right UTF-8 locale setup command for the remote platform.
-                    // - POSIX shells (bash/zsh on macOS/Linux): export LANG/LC_ALL
-                    // - Windows (PowerShell/cmd): chcp 65001
-                    let cmd: &[u8] = if remote_platform.eq_ignore_ascii_case("Windows") {
-                        b"chcp 65001 >nul 2>&1\r"
+                    let hint = if remote_platform.eq_ignore_ascii_case("Windows") {
+                        "\n  | Tip: If CJK chars display incorrectly, run:\n  |   cmd /c \"chcp 65001 >nul 2>&1\"\n"
                     } else {
-                        b"export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 2>/dev/null; stty iutf8 2>/dev/null\r"
+                        "\n  | Tip: If CJK chars display incorrectly, run:\n  |   export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8\n"
                     };
-                    let mut a = TerminalAction::new();
-                    a.set_data(TerminalData { terminal_id, data: cmd.to_vec().into(), compressed: false, ..Default::default() });
-                    let mut m = Message::new(); m.set_terminal_action(a);
-                    conn.send(&m).await.ok();
-                    log::debug!("Injected locale fix (LANG/LC_ALL=en_US.UTF-8)");
+                    eprintln!("{hint}");
                 }
 
                 if let Ok((nc, nr)) = crossterm::terminal::size() {

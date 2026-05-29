@@ -128,8 +128,9 @@ local terminal                                                     remote shell
 
 **Chinese/CJK characters display as garbled text:**
 - The remote shell's locale may not be set to UTF-8
-- rustshell automatically injects `export LANG=en_US.UTF-8` on macOS/Linux and `chcp 65001` on Windows
-- If you still see issues, manually run `export LANG=en_US.UTF-8` in the remote shell
+- rustshell prints a hint with the appropriate fix command after connecting
+- macOS/Linux: copy and run `export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`
+- Windows: copy and run `chcp 65001`
 
 **Connection drops after idle:**
 - A keepalive heartbeat is sent every 15 seconds; the relay or server may have a shorter timeout
