@@ -23,10 +23,16 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 // ── CLI arguments ──────────────────────────────────────────────────
 
 #[derive(Parser, Debug)]
-#[command(name = APP_NAME, about = "Cross-platform remote shell via RustDesk")]
+#[command(
+    name = APP_NAME,
+    about = "Cross-platform remote shell via RustDesk",
+    after_help = "Environment variables (fallback when CLI arg not set):\n  \
+                  RUSTSHELL_ID, RUSTSHELL_SERVER, RUSTSHELL_PORT, RUSTSHELL_KEY, \
+                  RUSTSHELL_PASSWORD, RUSTSHELL_DEBUG=(1|true)"
+)]
 struct Args {
-    #[arg(short = 'i', long)] id: String,
-    #[arg(short = 's', long)] server: String,
+    #[arg(short = 'i', long, default_value = "")] id: String,
+    #[arg(short = 's', long, default_value = "")] server: String,
     #[arg(short = 'p', long, default_value = "21116")] port: u16,
     #[arg(short = 'k', long, default_value = "")] key: String,
     #[arg(short = 'w', long, default_value = "")] password: String,
@@ -217,9 +223,18 @@ fn main() {
         win_console::SetConsoleOutputCP(65001);
     }
 
-    let args = Args::parse();
-    if args.id.is_empty() { eprintln!("Error: --id is required"); std::process::exit(1); }
-    if args.server.is_empty() { eprintln!("Error: --server is required"); std::process::exit(1); }
+    let mut args = Args::parse();
+
+    // Fill empty fields from RUSTSHELL_* environment variables
+    if args.id.is_empty() { args.id = std::env::var("RUSTSHELL_ID").unwrap_or_default(); }
+    if args.server.is_empty() { args.server = std::env::var("RUSTSHELL_SERVER").unwrap_or_default(); }
+    if args.port == 21116 { if let Ok(v) = std::env::var("RUSTSHELL_PORT") { if let Ok(p) = v.parse() { args.port = p; } } }
+    if args.key.is_empty() { args.key = std::env::var("RUSTSHELL_KEY").unwrap_or_default(); }
+    if !args.debug { args.debug = std::env::var("RUSTSHELL_DEBUG").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false); }
+    if args.password.is_empty() { args.password = std::env::var("RUSTSHELL_PASSWORD").unwrap_or_default(); }
+
+    if args.id.is_empty() { eprintln!("Error: --id or RUSTSHELL_ID is required"); std::process::exit(1); }
+    if args.server.is_empty() { eprintln!("Error: --server or RUSTSHELL_SERVER is required"); std::process::exit(1); }
 
     let log_level = if args.debug { "debug" } else { "info" };
     hbb_common::env_logger::init_from_env(
