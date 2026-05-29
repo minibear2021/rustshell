@@ -135,7 +135,7 @@ local terminal                                                     remote shell
 - Windows: copy and run `chcp 65001`
 
 **Connection hangs after typing `exit` on Windows remote:**
-- This is a [known bug](https://github.com/rustdesk/rustdesk) in the RustDesk server: Windows ConPTY does not signal EOF when the shell exits, so the server never detects the session has ended
+- This is a [known bug](https://github.com/rustdesk/rustdesk/blob/caadd72ab2db8cc66e3d237e3e1cb60edbab7bc5/src/server/terminal_service.rs#L1267-L1270) in the RustDesk server: Windows ConPTY does not signal EOF when the shell exits, so the server never detects the session has ended
 - **Workaround**: use Ctrl+C or Ctrl+D to close the session instead of typing `exit`. These send an explicit `CloseTerminal` message that the server handles correctly
 - This issue only affects Windows remotes; macOS and Linux remotes work correctly with `exit`
 
