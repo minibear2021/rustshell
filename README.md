@@ -1,5 +1,7 @@
 # rustshell
 
+[中文文档](README_zh.md)
+
 Cross-platform remote shell client. Connects to any device running RustDesk
 and opens a remote terminal session via the RustDesk relay infrastructure.
 
